@@ -4,11 +4,13 @@ import json
 from django.contrib import messages
 from django.core import serializers
 from django.core.serializers.json import DjangoJSONEncoder
-from django.core.urlresolvers import reverse
+from django.core.urlresolvers import reverse, reverse_lazy
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 from django.utils.translation import ugettext_lazy as _
-from django.views.generic import DeleteView, FormView, ListView
+from django.views.generic import (
+    DeleteView, FormView, ListView, CreateView, UpdateView
+)
 
 from oscar.core.loading import get_class, get_classes, get_model
 from oscar.views import sort_queryset
@@ -19,10 +21,12 @@ Range = get_model('offer', 'Range')
 Product = get_model('catalogue', 'Product')
 OrderDiscount = get_model('order', 'OrderDiscount')
 Benefit = get_model('offer', 'Benefit')
-MetaDataForm, ConditionForm, BenefitForm, RestrictionsForm, OfferSearchForm \
+MetaDataForm, ConditionForm, BenefitForm, RestrictionsForm, OfferSearchForm,\
+ConditionSearchForm \
     = get_classes('dashboard.offers.forms',
                   ['MetaDataForm', 'ConditionForm', 'BenefitForm',
-                   'RestrictionsForm', 'OfferSearchForm'])
+                   'RestrictionsForm', 'OfferSearchForm',
+                   'ConditionSearchForm'])
 OrderDiscountCSVFormatter = get_class(
     'dashboard.offers.reports', 'OrderDiscountCSVFormatter')
 
@@ -68,6 +72,59 @@ class OfferListView(ListView):
         ctx['form'] = self.form
         ctx['is_filtered'] = self.is_filtered
         return ctx
+
+
+class ConditionListView(ListView):
+    model = Condition
+    context_object_name = 'conditions'
+    template_name = 'dashboard/offers/condition_list.html'
+    form_class = ConditionSearchForm
+
+    def get_queryset(self):
+        qs = self.model._default_manager.order_by('-id')
+
+        self.description = _("All conditions")
+
+        # We track whether the queryset is filtered to determine whether we
+        # show the search form 'reset' button.
+        self.is_filtered = False
+        self.form = self.form_class(self.request.GET)
+        if not self.form.is_valid():
+            return qs
+
+        data = self.form.cleaned_data
+        if data['range']:
+            qs = qs.filter(range=data['range'])
+            self.description = _("Offers for range '%s'") % data['range']
+            self.is_filtered = True
+        return qs
+
+    def get_context_data(self, **kwargs):
+        ctx = super(ConditionListView, self).get_context_data(**kwargs)
+        ctx['queryset_description'] = self.description
+        ctx['form'] = self.form
+        ctx['is_filtered'] = self.is_filtered
+        return ctx
+
+
+class ConditionDeleteView(DeleteView):
+    model = Condition
+    template_name = 'dashboard/offers/condition_delete.html'
+    success_url = reverse_lazy('dashboard:condition-list')
+
+
+class ConditionCreateView(CreateView):
+    model = Condition
+    template_name = 'dashboard/offers/condition_edit.html'
+    form_class = ConditionForm
+    success_url = reverse_lazy('dashboard:condition-list')
+
+
+class ConditionUpdateView(UpdateView):
+    model = Condition
+    template_name = 'dashboard/offers/condition_edit.html'
+    form_class = ConditionForm
+    success_url = reverse_lazy('dashboard:condition-list')
 
 
 class OfferWizardStepView(FormView):

@@ -68,7 +68,7 @@ class AbstractConditionalOffer(models.Model):
     status = models.CharField(_("Status"), max_length=64, default=OPEN)
 
     condition = models.ForeignKey(
-        'offer.Condition', verbose_name=_("Condition"))
+        'offer.Condition', verbose_name=_("Condition"), related_name='offers')
     benefit = models.ForeignKey('offer.Benefit', verbose_name=_("Benefit"))
 
     # Some complicated situations require offers to be applied in a set order.

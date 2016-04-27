@@ -16,10 +16,19 @@ class OffersDashboardApplication(Application):
                                   'OfferRestrictionsView')
     delete_view = get_class('dashboard.offers.views', 'OfferDeleteView')
     detail_view = get_class('dashboard.offers.views', 'OfferDetailView')
+    condition_list_view = get_class('dashboard.offers.views', 'ConditionListView')
+    condition_delete_view = get_class('dashboard.offers.views', 'ConditionDeleteView')
+    condition_create_view = get_class('dashboard.offers.views', 'ConditionCreateView')
+    condition_update_view = get_class('dashboard.offers.views', 'ConditionUpdateView')
 
     def get_urls(self):
         urls = [
             url(r'^$', self.list_view.as_view(), name='offer-list'),
+            # Conditions
+            url(r'^conditions/$', self.condition_list_view.as_view(), name='condition-list'),
+            url(r'^conditions/new/$', self.condition_create_view.as_view(), name='condition-create'),
+            url(r'^conditions/(?P<pk>[0-9]+)/$', self.condition_update_view.as_view(), name='condition-update'),
+            url(r'^conditions/(?P<pk>[0-9]+)/delete/$', self.condition_delete_view.as_view(), name='condition-delete'),
             # Creation
             url(r'^new/name-and-description/$', self.metadata_view.as_view(),
                 name='offer-metadata'),

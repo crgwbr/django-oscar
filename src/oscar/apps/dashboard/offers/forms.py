@@ -9,6 +9,7 @@ from oscar.forms import widgets
 
 ConditionalOffer = get_model('offer', 'ConditionalOffer')
 Condition = get_model('offer', 'Condition')
+Range = get_model('offer', 'Range')
 Benefit = get_model('offer', 'Benefit')
 
 
@@ -56,8 +57,7 @@ class ConditionForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super(ConditionForm, self).__init__(*args, **kwargs)
 
-        custom_conditions = Condition.objects.all().exclude(
-            proxy_class=None)
+        custom_conditions = Condition.objects.all()
         if len(custom_conditions) > 0:
             # Initialise custom_condition field
             choices = [(c.id, six.text_type(c)) for c in custom_conditions]
@@ -159,3 +159,7 @@ class BenefitForm(forms.ModelForm):
 class OfferSearchForm(forms.Form):
     name = forms.CharField(required=False, label=_("Offer name"))
     is_active = forms.BooleanField(required=False, label=_("Is active?"))
+
+
+class ConditionSearchForm(forms.Form):
+    range = forms.ModelChoiceField(required=False, queryset=Range.objects.order_by('name'))

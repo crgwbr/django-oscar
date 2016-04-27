@@ -74,7 +74,7 @@
             </tr>
             <tr>
                 <th>{% trans "Condition" %}</th>
-                <td>{{ offer.condition.description|safe }}</td>
+                <td><a href="{% url 'dashboard:condition-update' pk=offer.condition.pk %}">{{ offer.condition.description|safe }}</a></td>
                 <td><a href="{% url 'dashboard:offer-condition' pk=offer.pk %}" class="btn btn-default">{% trans "Edit" %}</a></td>
             </tr>
             <tr>
