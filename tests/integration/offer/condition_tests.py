@@ -209,3 +209,76 @@ class TestCoverageCondition(TestCase):
         self.assertTrue(cond.is_satisfied(self.offer, self.basket))
         cond.consume_items(self.offer, self.basket, [])
         self.assertEqual(0, self.basket.num_items_without_discount)
+
+
+class TestConjunctiveCompoundCondition(TestCase):
+    def setUp(self):
+        self.range = models.Range.objects.create(
+            name="All products range", includes_all_products=True)
+        self.basket = factories.create_basket(empty=True)
+
+        cond_1 = models.CountCondition.objects.create(
+            range=self.range, type="Count", value=2)
+        cond_2 = models.ValueCondition.objects.create(
+            range=self.range, type="Value", value=D('10.00'))
+        self.condition = models.CompoundCondition.objects.create(
+            type="Compound",
+            conjunction=models.CompoundCondition.AND)
+        self.condition.subconditions = [cond_1, cond_2]
+        self.condition.save()
+
+        self.offer = mock.Mock()
+
+    def test_is_not_satified_by_empty_basket(self):
+        self.assertFalse(self.condition.is_satisfied(self.offer, self.basket))
+
+    def test_not_discountable_product_fails_condition(self):
+        prod1, prod2 = factories.create_product(), factories.create_product()
+        prod2.is_discountable = False
+        prod2.save()
+        add_product(self.basket, D('8'), product=prod1)
+        add_product(self.basket, D('8'), product=prod2)
+        self.assertFalse(self.condition.is_satisfied(self.offer, self.basket))
+
+    def test_empty_basket_fails_partial_condition(self):
+        self.assertFalse(self.condition.is_partially_satisfied(self.offer, self.basket))
+
+    def test_smaller_quantity_basket_passes_partial_condition(self):
+        add_product(self.basket, D('8'))
+        self.assertTrue(self.condition.is_partially_satisfied(self.offer, self.basket))
+
+    def test_smaller_quantity_basket_upsell_message(self):
+        add_product(self.basket, D('8'))
+        msg = self.condition.get_upsell_message(self.offer, self.basket)
+        self.assertTrue('Buy 1 more product from ' in msg)
+        self.assertTrue(' and ' in msg)
+        self.assertTrue('Spend' in msg)
+
+    def test_matching_quantity_basket_fails_partial_condition(self):
+        add_product(self.basket, D('5'))
+        self.assertTrue(self.condition.is_partially_satisfied(self.offer, self.basket))
+        add_product(self.basket, D('5'))
+        self.assertFalse(self.condition.is_partially_satisfied(self.offer, self.basket))
+
+    def test_matching_quantity_basket_passes_condition(self):
+        add_product(self.basket, D('5'))
+        self.assertFalse(self.condition.is_satisfied(self.offer, self.basket))
+        add_product(self.basket, D('5'))
+        self.assertTrue(self.condition.is_satisfied(self.offer, self.basket))
+
+    def test_greater_quantity_basket_passes_condition(self):
+        add_product(self.basket, D('1'), quantity=3)
+        self.assertFalse(self.condition.is_satisfied(self.offer, self.basket))
+        add_product(self.basket, D('10'), quantity=1)
+        self.assertTrue(self.condition.is_satisfied(self.offer, self.basket))
+
+    def test_consumption(self):
+        add_product(self.basket, D('5'), quantity=3)
+        self.condition.consume_items(self.offer, self.basket, [])
+        self.assertEqual(1, self.basket.all_lines()[0].quantity_without_discount)
+
+    def test_is_satisfied_accounts_for_consumed_items(self):
+        add_product(self.basket, D('5'), quantity=3)
+        self.assertTrue(self.condition.is_satisfied(self.offer, self.basket))
+        self.condition.consume_items(self.offer, self.basket, [])
+        self.assertFalse(self.condition.is_satisfied(self.offer, self.basket))

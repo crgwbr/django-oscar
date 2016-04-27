@@ -1,4 +1,3 @@
-from django.utils import timezone
 import json
 
 from django.contrib import messages
@@ -7,26 +6,27 @@ from django.core.serializers.json import DjangoJSONEncoder
 from django.core.urlresolvers import reverse, reverse_lazy
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from django.utils.translation import ugettext_lazy as _
 from django.views.generic import (
-    DeleteView, FormView, ListView, CreateView, UpdateView
-)
+    CreateView, DeleteView, FormView, ListView, UpdateView)
 
 from oscar.core.loading import get_class, get_classes, get_model
 from oscar.views import sort_queryset
 
 ConditionalOffer = get_model('offer', 'ConditionalOffer')
 Condition = get_model('offer', 'Condition')
+CompoundCondition = get_model('offer', 'CompoundCondition')
 Range = get_model('offer', 'Range')
 Product = get_model('catalogue', 'Product')
 OrderDiscount = get_model('order', 'OrderDiscount')
 Benefit = get_model('offer', 'Benefit')
 MetaDataForm, ConditionForm, BenefitForm, RestrictionsForm, OfferSearchForm,\
-ConditionSearchForm \
+    ConditionSearchForm, CompoundConditionForm \
     = get_classes('dashboard.offers.forms',
                   ['MetaDataForm', 'ConditionForm', 'BenefitForm',
                    'RestrictionsForm', 'OfferSearchForm',
-                   'ConditionSearchForm'])
+                   'ConditionSearchForm', 'CompoundConditionForm'])
 OrderDiscountCSVFormatter = get_class(
     'dashboard.offers.reports', 'OrderDiscountCSVFormatter')
 
@@ -120,11 +120,30 @@ class ConditionCreateView(CreateView):
     success_url = reverse_lazy('dashboard:condition-list')
 
 
+class CompoundConditionCreateView(CreateView):
+    model = CompoundCondition
+    template_name = 'dashboard/offers/condition_edit_compound.html'
+    form_class = CompoundConditionForm
+    success_url = reverse_lazy('dashboard:condition-list')
+
+
 class ConditionUpdateView(UpdateView):
     model = Condition
-    template_name = 'dashboard/offers/condition_edit.html'
-    form_class = ConditionForm
     success_url = reverse_lazy('dashboard:condition-list')
+
+    def get_object(self, queryset=None):
+        obj = super(ConditionUpdateView, self).get_object(queryset)
+        return obj.proxy()
+
+    def get_form_class(self):
+        if self.object.type == Condition.COMPOUND:
+            return CompoundConditionForm
+        return ConditionForm
+
+    def get_template_names(self):
+        if self.object.type == Condition.COMPOUND:
+            return 'dashboard/offers/condition_edit_compound.html'
+        return 'dashboard/offers/condition_edit.html'
 
 
 class OfferWizardStepView(FormView):

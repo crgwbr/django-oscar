@@ -19,7 +19,9 @@
 
 {% block header %}
     <div class="page-header">
-        <a href="{% url 'dashboard:condition-create' %}" class="btn btn-primary btn-lg pull-right"><i class="icon-plus"></i> {% trans "Create new condition" %}</a>
+        <a href="{% url 'dashboard:condition-create' %}" class="btn btn-primary pull-right"><i class="icon-plus"></i> {% trans "Create new condition" %}</a>
+
+        <a href="{% url 'dashboard:condition-create-compound' %}" class="btn btn-primary pull-right"><i class="icon-plus"></i> {% trans "Create new compound condition" %}</a>
         <h1>{% trans "Conditions" %}</h1>
     </div>
 {% endblock header %}
@@ -48,6 +50,7 @@
                     <th>{% trans 'Type' %}</th>
                     <th>{% trans 'Value' %}</th>
                     <th>{% trans 'Used by Offers' %}</th>
+                    <th>{% trans 'Description' %}</th>
                     <th></th>
                 </tr>
                 {% for condition in conditions %}
@@ -63,6 +66,7 @@
                                 {% endfor %}
                             </ul>
                         </td>
+                        <td>{{ condition.description|safe|default:"-" }}</td>
                         <td>
                             <div class="btn-toolbar">
                                 <div class="btn-group">

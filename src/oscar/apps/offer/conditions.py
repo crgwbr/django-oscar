@@ -1,6 +1,7 @@
 from decimal import Decimal as D
 from decimal import ROUND_UP
 
+from django.db import models
 from django.utils import six
 from django.utils.translation import ugettext_lazy as _
 from django.utils.translation import ungettext
@@ -12,7 +13,7 @@ from oscar.templatetags.currency_filters import currency
 Condition = get_model('offer', 'Condition')
 
 __all__ = [
-    'CountCondition', 'CoverageCondition', 'ValueCondition'
+    'CountCondition', 'CoverageCondition', 'ValueCondition', 'CompoundCondition'
 ]
 
 
@@ -88,6 +89,7 @@ class CountCondition(Condition):
         # We need to count how many items have already been consumed as part of
         # applying the benefit, so we don't consume too many items.
         num_consumed = 0
+        affected_lines = list(affected_lines)
         for line, __, quantity in affected_lines:
             num_consumed += quantity
         to_consume = max(0, self.value - num_consumed)
@@ -99,9 +101,11 @@ class CountCondition(Condition):
             quantity_to_consume = min(line.quantity_without_discount,
                                       to_consume)
             line.consume(quantity_to_consume)
+            affected_lines.append((line, 0, quantity_to_consume))
             to_consume -= quantity_to_consume
             if to_consume == 0:
                 break
+        return affected_lines
 
 
 class CoverageCondition(Condition):
@@ -174,6 +178,7 @@ class CoverageCondition(Condition):
         # Determine products that have already been consumed by applying the
         # benefit
         consumed_products = []
+        affected_lines = list(affected_lines)
         for line, __, quantity in affected_lines:
             consumed_products.append(line.product)
 
@@ -191,10 +196,12 @@ class CoverageCondition(Condition):
                 continue
             # Only consume a quantity of 1 from each line
             line.consume(1)
+            affected_lines.append((line, 0, 1))
             consumed_products.append(product)
             to_consume -= 1
             if to_consume == 0:
                 break
+        return affected_lines
 
     def get_value_of_satisfying_items(self, offer, basket):
         covered_ids = []
@@ -280,6 +287,7 @@ class ValueCondition(Condition):
         """
         # Determine value of items already consumed as part of discount
         value_consumed = D('0.00')
+        affected_lines = list(affected_lines)
         for line, __, qty in affected_lines:
             price = utils.unit_price(offer, line)
             value_consumed += price * qty
@@ -294,6 +302,104 @@ class ValueCondition(Condition):
                 line.quantity_without_discount,
                 (to_consume / price).quantize(D(1), ROUND_UP))
             line.consume(quantity_to_consume)
+            affected_lines.append((line, 0, quantity_to_consume))
             to_consume -= price * quantity_to_consume
             if to_consume <= 0:
                 break
+        return affected_lines
+
+
+class CompoundCondition(Condition):
+    """
+    An offer condition that aggregates together multiple other conditions,
+    allowing the creation of compound rules for offers.
+    """
+    AND, OR = ("AND", "OR")
+    CONJUNCTION_TYPE_CHOICES = (
+        (AND, _("Logical AND")),
+        (OR, _("Logical OR")),
+    )
+    conjunction = models.CharField(
+        _("Subcondition conjunction type"), choices=CONJUNCTION_TYPE_CHOICES,
+        default=AND, max_length=10)
+
+    subconditions = models.ManyToManyField('offer.Condition', related_name='parent_condition')
+
+    class Meta:
+        app_label = 'offer'
+        verbose_name = _("Compound condition")
+        verbose_name_plural = _("Compound conditions")
+
+    @property
+    def children(self):
+        if self.pk is None:
+            return []
+        chil = [c for c in self.subconditions.all() if c.id != self.id]
+        return chil
+
+    @property
+    def name(self):
+        names = (c.name for c in self.children)
+        return self._human_readable_conjoin(names, 'Empty Condition')
+
+    @property
+    def description(self):
+        descrs = (c.description for c in self.children)
+        return self._human_readable_conjoin(descrs, 'Empty Condition')
+
+    def is_satisfied(self, *args):
+        return self._reduce_results(self.conjunction, 'is_satisfied', *args)
+
+    def is_partially_satisfied(self, *args):
+        return self._reduce_results(self.OR, 'is_partially_satisfied', *args)
+
+    def get_upsell_message(self, offer, basket):
+        messages = []
+        for c in self.children:
+            condition = c.proxy()
+            partial = condition.is_partially_satisfied(offer, basket)
+            complete = condition.is_satisfied(offer, basket)
+            if not complete and partial:
+                messages.append(condition.get_upsell_message(offer, basket))
+        return self._human_readable_conjoin(messages)
+
+    def consume_items(self, offer, basket, affected_lines):
+        memo = affected_lines
+        for c in self.children:
+            affected_lines = c.proxy().consume_items(offer, basket, memo)
+            if affected_lines and affected_lines.__iter__:
+                memo = affected_lines
+        return affected_lines
+
+    def _human_readable_conjoin(self, strings, empty=None):
+        labels = {
+            self.AND: _(' and '),
+            self.OR: _(' or '),
+        }
+        strings = list(strings)
+        if len(strings) <= 0 and empty is not None:
+            return empty
+        return labels[self.conjunction].join(strings)
+
+    def _reduce_results(self, conjunction, method_name, *args):
+        result = self._get_conjunction_root_memo(conjunction)
+        for c in self.children:
+            condition = c.proxy()
+            fn = getattr(condition, method_name)
+            subresult = fn(*args)
+            result = self._apply_conjunction(conjunction, result, subresult)
+        return result
+
+    def _get_conjunction_root_memo(self, conjunction):
+        memos = {
+            self.AND: True,
+            self.OR: False,
+        }
+        return memos[conjunction]
+
+    def _apply_conjunction(self, conjunction, a, b):
+        fns = {
+            self.AND: lambda: a and b,
+            self.OR: lambda: a or b,
+        }
+        return fns[conjunction]()

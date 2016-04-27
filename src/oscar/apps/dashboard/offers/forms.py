@@ -9,6 +9,7 @@ from oscar.forms import widgets
 
 ConditionalOffer = get_model('offer', 'ConditionalOffer')
 Condition = get_model('offer', 'Condition')
+CompoundCondition = get_model('offer', 'CompoundCondition')
 Range = get_model('offer', 'Range')
 Benefit = get_model('offer', 'Benefit')
 
@@ -72,6 +73,11 @@ class ConditionForm(forms.ModelForm):
             for field in ('type', 'range', 'value'):
                 self.fields[field].required = True
 
+        # Remove COMPOUND type from type choice dropdown
+        self.fields['type'].choices = filter(
+            lambda choice: choice[0] != Condition.COMPOUND,
+            self.fields['type'].choices)
+
     class Meta:
         model = Condition
         fields = ['range', 'type', 'value']
@@ -100,6 +106,16 @@ class ConditionForm(forms.ModelForm):
             return Condition.objects.get(
                 id=self.cleaned_data['custom_condition'])
         return super(ConditionForm, self).save(*args, **kwargs)
+
+
+class CompoundConditionForm(forms.ModelForm):
+    class Meta:
+        model = CompoundCondition
+        fields = ['conjunction', 'subconditions']
+
+    def save(self, *args, **kwargs):
+        self.instance.type = Condition.COMPOUND
+        return super(CompoundConditionForm, self).save(*args, **kwargs)
 
 
 class BenefitForm(forms.ModelForm):

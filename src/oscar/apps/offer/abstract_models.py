@@ -626,14 +626,15 @@ class AbstractCondition(models.Model):
     A condition for an offer to be applied. You can either specify a custom
     proxy class, or need to specify a type, range and value.
     """
-    COUNT, VALUE, COVERAGE = ("Count", "Value", "Coverage")
+    COUNT, VALUE, COVERAGE, COMPOUND = ("Count", "Value", "Coverage", "Compound")
     TYPE_CHOICES = (
         (COUNT, _("Depends on number of items in basket that are in "
                   "condition range")),
         (VALUE, _("Depends on value of items in basket that are in "
                   "condition range")),
         (COVERAGE, _("Needs to contain a set number of DISTINCT items "
-                     "from the condition range")))
+                     "from the condition range")),
+        (COMPOUND, _("Aggregates multiple sub-conditions together")))
     range = models.ForeignKey(
         'offer.Range', verbose_name=_("Range"), null=True, blank=True)
     type = models.CharField(_('Type'), max_length=128, choices=TYPE_CHOICES,
@@ -659,7 +660,8 @@ class AbstractCondition(models.Model):
         klassmap = {
             self.COUNT: conditions.CountCondition,
             self.VALUE: conditions.ValueCondition,
-            self.COVERAGE: conditions.CoverageCondition
+            self.COVERAGE: conditions.CoverageCondition,
+            self.COMPOUND: conditions.CompoundCondition,
         }
         # Short-circuit logic if current class is already a proxy class.
         if self.__class__ in klassmap.values():
@@ -677,6 +679,11 @@ class AbstractCondition(models.Model):
                 return self
             return klass(**field_dict)
         if self.type in klassmap:
+            # Check if we're using multi-table inheritance
+            model_name = klassmap[self.type]._meta.model_name
+            if hasattr(self, model_name):
+                return getattr(self, model_name)
+            # Must just be a standard proxy-model
             return klassmap[self.type](**field_dict)
         raise RuntimeError("Unrecognised condition type (%s)" % self.type)
 
@@ -699,7 +706,7 @@ class AbstractCondition(models.Model):
         A description of the condition.
         Defaults to the name. May contain HTML.
         """
-        return self.name
+        return self.proxy().description
 
     def consume_items(self, offer, basket, affected_lines):
         pass

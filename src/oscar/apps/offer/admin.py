@@ -4,12 +4,20 @@ from oscar.core.loading import get_model
 
 ConditionalOffer = get_model('offer', 'ConditionalOffer')
 Condition = get_model('offer', 'Condition')
+CompoundCondition = get_model('offer', 'CompoundCondition')
 Benefit = get_model('offer', 'Benefit')
 Range = get_model('offer', 'Range')
 
 
 class ConditionAdmin(admin.ModelAdmin):
-    list_display = ('type', 'value', 'range')
+    list_display = ('name', 'type', 'value', 'range')
+    list_filter = ('type', 'range')
+
+
+class CompoundConditionAdmin(admin.ModelAdmin):
+    list_display = ('name', 'conjunction', 'range')
+    list_filter = ('conjunction', )
+    fields = ('conjunction', 'subconditions')
 
 
 class BenefitAdmin(admin.ModelAdmin):
@@ -34,5 +42,6 @@ class ConditionalOfferAdmin(admin.ModelAdmin):
 
 admin.site.register(ConditionalOffer, ConditionalOfferAdmin)
 admin.site.register(Condition, ConditionAdmin)
+admin.site.register(CompoundCondition, CompoundConditionAdmin)
 admin.site.register(Benefit, BenefitAdmin)
 admin.site.register(Range)
